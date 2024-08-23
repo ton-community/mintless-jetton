@@ -40,7 +40,7 @@ global int merkle_root;
     set_data(pack_jetton_wallet_data(status, balance, owner_address, jetton_master_address, merkle_root));
 }
 
-() send_jettons(slice in_msg_body, slice sender_address, int msg_value, int fwd_fee) impure inline_ref {
+() send_jettons(slice in_msg_body, slice sender_address, int my_ton_balance, int msg_value, int fwd_fee) impure inline_ref {
     ;; see transfer TL-B layout in jetton.tlb
     int query_id = in_msg_body~load_query_id();
     int jetton_amount = in_msg_body~load_coins();
@@ -53,6 +53,7 @@ global int merkle_root;
     slice to_wallet_address = calculate_jetton_wallet_address(state_init);
     slice response_address = in_msg_body~load_msg_addr();
     cell custom_payload = in_msg_body~load_maybe_ref();
+    int mode = SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE | SEND_MODE_BOUNCE_ON_ACTION_FAIL;
     ifnot(custom_payload.null?()) {
         slice cps = custom_payload.begin_parse();
         int cp_op = cps~load_op();
@@ -65,8 +66,16 @@ global int merkle_root;
         throw_unless(error::airdrop_finished, time <= expired_at);
         balance += airdrop_amount;
         status |= 1;
+
+        ;; first outgoing transfer can be from just deployed jetton wallet
+        ;; in this case we need to reserve TON for storage
+        int to_leave_on_balance = my_ton_balance - msg_value + my_storage_due();
+        int actual_withheld = max(to_leave_on_balance, calculate_jetton_wallet_min_storage_fee());
+        raw_reserve(actual_withheld, RESERVE_REGULAR | RESERVE_BOUNCE_ON_ACTION_FAIL);
+        mode = SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_BOUNCE_ON_ACTION_FAIL
+
         ;; custom payload processing is not constant gas, account for that via gas_consumed()
-        msg_value -= get_compute_fee(MY_WORKCHAIN, gas_consumed());
+        msg_value -= get_compute_fee(MY_WORKCHAIN, gas_consumed()) + actual_withheld;
     }
     int forward_ton_amount = in_msg_body~load_coins();
     check_either_forward_payload(in_msg_body);
@@ -96,7 +105,7 @@ global int merkle_root;
 
     check_amount_is_enough_to_transfer(msg_value , forward_ton_amount, fwd_fee);
 
-    send_raw_message(msg, SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE | SEND_MODE_BOUNCE_ON_ACTION_FAIL);
+    send_raw_message(msg, mode);
 
     save_data(status, balance, owner_address, jetton_master_address);
 }
@@ -220,7 +229,7 @@ global int merkle_root;
 
     ;; outgoing transfer
     if (op == op::transfer) {
-        send_jettons(in_msg_body, sender_address, msg_value, fwd_fee);
+        send_jettons(in_msg_body, sender_address, my_ton_balance, msg_value, fwd_fee);
         return ();
     }
 

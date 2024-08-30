@@ -72,7 +72,7 @@ global int merkle_root;
         int to_leave_on_balance = my_ton_balance - msg_value + my_storage_due();
         int actual_withheld = max(to_leave_on_balance, calculate_jetton_wallet_min_storage_fee());
         raw_reserve(actual_withheld, RESERVE_REGULAR | RESERVE_BOUNCE_ON_ACTION_FAIL);
-        mode = SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_BOUNCE_ON_ACTION_FAIL
+        mode = SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_BOUNCE_ON_ACTION_FAIL;
 
         ;; custom payload processing is not constant gas, account for that via gas_consumed()
         msg_value -= get_compute_fee(MY_WORKCHAIN, gas_consumed()) + actual_withheld;

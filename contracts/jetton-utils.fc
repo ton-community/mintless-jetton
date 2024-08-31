@@ -160,7 +160,7 @@ cell calculate_jetton_wallet_state_init_internal(slice owner_address, slice jett
         int data_hash = calculate_jetton_wallet_data_hash_cheap(jetton_wallet_data_hash_base, salt);
         int account_hash = calculate_account_hash_cheap_with_base_builder(jetton_wallet_account_hash_base, data_hash);
         int wallet_prefix = account_hash >> (256 - 4);
-        int distance = abs(wallet_prefix - owner_prefix);
+        int distance = wallet_prefix ^ owner_prefix;
         if (distance < min_distance) {
             min_distance = distance;
             min_salt = salt;
@@ -195,7 +195,7 @@ cell calculate_jetton_wallet_state_init_internal(slice owner_address, slice jett
         salt += 1;
         state_init = calculate_jetton_wallet_state_init_internal(owner_address, jetton_master_address, jetton_wallet_code, merkle_root, salt);
         int wallet_prefix = cell_hash(state_init) >> (256 - 4);
-        int distance = abs(wallet_prefix - owner_prefix);
+        int distance = wallet_prefix ^ owner_prefix;
         if (distance < min_distance) {
             min_distance = distance;
             min_salt = salt;

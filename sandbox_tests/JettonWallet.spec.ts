@@ -290,6 +290,7 @@ describe('JettonWallet', () => {
     });
     // implementation detail
     it('minter admin should be able to mint jettons', async () => {
+        //await blockchain.setVerbosityForAddress(jettonMinter.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
         // can mint from deployer
         let initialTotalSupply = await jettonMinter.getTotalSupply();
         const deployerJettonWallet = await userWallet(deployer.address);

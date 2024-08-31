@@ -41,12 +41,12 @@ global int merkle_root;
     raw_reserve(ONE_TON, RESERVE_REGULAR); ;; reserve for storage fees
 
     cell state_init = calculate_jetton_wallet_state_init(to_address, my_address(), jetton_wallet_code, merkle_root);
-    slice to_wallet_address = calculate_jetton_wallet_address(state_init);
+    builder to_wallet_address = calculate_jetton_wallet_address(state_init);
 
     ;; build MessageRelaxed, see TL-B layout in stdlib.fc#L733
     var msg = begin_cell()
     .store_msg_flags_and_address_none(BOUNCEABLE)
-    .store_slice(to_wallet_address) ;; dest
+    .store_builder(to_wallet_address) ;; dest
     .store_coins(ton_amount);
 
     if (need_state_init) {
@@ -224,6 +224,13 @@ slice get_wallet_address(slice owner_address) method_id {
     (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();
     return calculate_user_jetton_wallet_address(owner_address, my_address(), jetton_wallet_code, merkle_root);
 }
+
+(cell, int) get_wallet_state_init_and_salt(slice owner_address) method_id {
+    (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();
+    [cell state_init, int salt] = calculate_jetton_wallet_properties_cheap(owner_address, my_address(), jetton_wallet_code, merkle_root);
+    return (state_init, salt);
+}
+
 
 slice get_next_admin_address() method_id {
     (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();

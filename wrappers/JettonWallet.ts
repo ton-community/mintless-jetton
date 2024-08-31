@@ -5,7 +5,8 @@ import {endParse} from "./JettonMinter";
 export type JettonWalletConfig = {
     ownerAddress: Address,
     jettonMasterAddress: Address,
-    merkleRoot: bigint
+    merkleRoot: bigint,
+    salt: bigint,
 };
 
 export function jettonWalletConfigToCell(config: JettonWalletConfig): Cell {
@@ -15,6 +16,7 @@ export function jettonWalletConfigToCell(config: JettonWalletConfig): Cell {
         .storeAddress(config.ownerAddress)
         .storeAddress(config.jettonMasterAddress)
         .storeUint(config.merkleRoot, 256)
+        .storeUint(config.salt, 10)
         .endCell();
 }
 
@@ -25,6 +27,8 @@ export function parseJettonWalletData(data: Cell) {
         balance: sc.loadCoins(),
         ownerAddress: sc.loadAddress(),
         jettonMasterAddress: sc.loadAddress(),
+        merkleRoot: sc.loadUint(256),
+        salt: sc.loadUint(10),
     };
     endParse(sc);
     return parsed;

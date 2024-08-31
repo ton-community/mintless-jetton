@@ -139,7 +139,8 @@ describe('Claim tests', () => {
                           JettonWallet.createFromConfig({
                               ownerAddress: address,
                               jettonMasterAddress: cMaster.address,
-                              merkleRoot: root ?? merkleRoot
+                              merkleRoot: root ?? merkleRoot,
+                              salt: await cMaster.getWalletSalt(address)
                           }, wallet_code)
                      );
        getContractData = async (address: Address) => {
@@ -164,7 +165,6 @@ describe('Claim tests', () => {
         const claimPayload = JettonWallet.claimPayload(receiverProof);
         const userData     = airdropData.get(testReceiver.address)!;
         const transferAmount = getRandomTon(1, 99);
-
         const res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('1'),
                                                   transferAmount, deployer.address,
                                                   testReceiver.address, claimPayload, 1n);

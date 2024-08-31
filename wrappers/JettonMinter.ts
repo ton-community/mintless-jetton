@@ -387,7 +387,16 @@ export class JettonMinter implements Contract {
             type: 'slice',
             cell: beginCell().storeAddress(owner).endCell()
         }])
-        return res.stack.readAddress()
+        return res.stack.readAddress();
+    }
+
+    async getWalletSalt(provider: ContractProvider, owner: Address): Promise<bigint> {
+        const res = await provider.get('get_wallet_state_init_and_salt', [{
+            type: 'slice',
+            cell: beginCell().storeAddress(owner).endCell()
+        }])
+        let stateInit = res.stack.readCell();
+        return res.stack.readBigNumber();
     }
 
     async getJettonData(provider: ContractProvider) {

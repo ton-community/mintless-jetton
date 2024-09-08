@@ -7,7 +7,7 @@ import {findTransactionRequired} from '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 import { randomAddress, getRandomTon, differentAddress, getRandomInt } from './utils';
 import { Op, Errors } from '../wrappers/JettonConstants';
-import { calcStorageFee, collectCellStats, computeFwdFees, computeFwdFeesVerbose, FullFees, GasPrices, getGasPrices, getMsgPrices, getStoragePrices, computedGeneric, storageGeneric, MsgPrices, setGasPrice, setMsgPrices, setStoragePrices, StorageStats, StorageValue } from '../gasUtils';
+import { calcStorageFee, collectCellStats, computeFwdFees, computeFwdFeesVerbose, FullFees, GasPrices, getGasPrices, getMsgPrices, getStoragePrices, computedGeneric, storageGeneric, MsgPrices, setGasPrice, setMsgPrices, setStoragePrices, StorageStats, StorageValue, computeGasFee } from '../gasUtils';
 import { sha256 } from '@ton/crypto';
 
 /*
@@ -761,7 +761,9 @@ describe('JettonWallet', () => {
             success: true
         });
         send_gas_fee = printTxGasStats("Jetton transfer", transferTx);
-        // send_gas_fee = computeGasFee(gasPrices, 9255n);
+        let mockGas = computeGasFee(gasPrices, 29700n);
+        expect(mockGas).toBeGreaterThanOrEqual(send_gas_fee)
+        send_gas_fee = mockGas;
 
         const receiveTx = findTransactionRequired(sendResult.transactions, {
             on: notDeployerJettonWallet.address,
@@ -770,7 +772,9 @@ describe('JettonWallet', () => {
             success: true
         });
         receive_gas_fee = printTxGasStats("Receive jetton", receiveTx);
-        // receive_gas_fee = computeGasFee(gasPrices, 10355n);
+        mockGas = computeGasFee(gasPrices, 31500n);
+        expect(mockGas).toBeGreaterThanOrEqual(receive_gas_fee);
+        receive_gas_fee = mockGas;
 
         expect(await deployerJettonWallet.getJettonBalance()).toEqual(initialJettonBalance - sentAmount);
         expect(await notDeployerJettonWallet.getJettonBalance()).toEqual(initialJettonBalance2 + sentAmount);
@@ -1043,12 +1047,10 @@ describe('JettonWallet', () => {
             const actualRecv   = printTxGasStats("Burn notification transaction", sendResult.transactions[2]);
             burn_gas_fee          = actualSent;
             burn_notification_fee = actualRecv;
-            /*
-            burn_gas_fee = computeGasFee(gasPrices, 5791n);
-            burn_notification_fee = computeGasFee(gasPrices, 6775n);
+            burn_gas_fee = computeGasFee(gasPrices, 6148n);
+            burn_notification_fee = computeGasFee(gasPrices, 27720n);
             expect(burn_gas_fee).toBeGreaterThanOrEqual(actualSent);
             expect(burn_notification_fee).toBeGreaterThanOrEqual(actualRecv);
-            */
     });
 
     it('not wallet owner should not be able to burn jettons', async () => {

@@ -6,6 +6,7 @@ import {jettonContentToCell, JettonMinter} from '../wrappers/JettonMinter';
 import { JettonWallet, jettonWalletConfigToCell } from '../wrappers/JettonWallet';
 import { buff2bigint, getRandomInt, getRandomTon, randomAddress, testJettonInternalTransfer } from './utils';
 import { Errors, Op } from '../wrappers/JettonConstants';
+import { calcStorageFee, getStoragePrices, StorageStats } from '../gasUtils';
 
 type AirdropData = {
     amount: bigint,
@@ -172,6 +173,9 @@ describe('Claim tests', () => {
         const userData     = airdropData.get(testReceiver.address)!;
         const transferAmount = getRandomTon(1, 99);
 
+
+        const smc = await blockchain.getContract(testJetton.address);
+        expect(smc.balance).toBe(0n);
         const res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('1'),
                                                   transferAmount, deployer.address,
                                                   testReceiver.address, claimPayload, 1n);
@@ -189,10 +193,16 @@ describe('Claim tests', () => {
             body: (b) => testJettonInternalTransfer(b!, {
                 amount: transferAmount,
                 from: testReceiver.address
-            })
+            }),
+            success: true
         });
             
 
+        const storagePrices  = getStoragePrices(blockchain.config);
+        const storageStats = new StorageStats(1289, 3);
+        const minStorage   = calcStorageFee(storagePrices, storageStats, BigInt(5 * 365 * 24 * 3600));
+
+        expect(smc.balance).toEqual(minStorage);
         expect(await deployerJetton.getJettonBalance()).toEqual(transferAmount);
         expect(await testJetton.getJettonBalance()).toEqual(userData.amount - transferAmount);
         

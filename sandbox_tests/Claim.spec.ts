@@ -69,6 +69,7 @@ describe('Claim tests', () => {
     let initialState: BlockchainSnapshot;
     let claimedAlready: BlockchainSnapshot;
     let merkleRoot: bigint;
+    let defaultContent: Cell;
     let cMaster: SandboxContract<JettonMinter>;
     let airdropData: Dictionary<Address, AirdropData>;
     let airdropCell: Cell;
@@ -113,13 +114,14 @@ describe('Claim tests', () => {
         receiverProof = airdropData.generateMerkleProof(testReceiver.address);
 
 
+        defaultContent = jettonContentToCell({
+                uri: 'https://some_jetton.com/meta.json'
+        })
         cMaster = blockchain.openContract(JettonMinter.createFromConfig({
             admin: deployer.address,
             wallet_code,
             merkle_root: merkleRoot,
-            jetton_content: jettonContentToCell({
-                uri: 'https://some_jetton.com/meta.json'
-            })
+            jetton_content: defaultContent
         }, minter_code));
 
         const masterDeploy = await cMaster.sendDeploy(deployer.getSender(), toNano('1000'));
@@ -134,15 +136,33 @@ describe('Claim tests', () => {
 
         initialState = blockchain.snapshot();
 
-        userWallet = async (address:Address, root?: bigint) => blockchain.openContract(
-        // From config because that's the way to attach state init to wrapper messages
-                          JettonWallet.createFromConfig({
-                              ownerAddress: address,
-                              jettonMasterAddress: cMaster.address,
-                              merkleRoot: root ?? merkleRoot,
-                              salt: await cMaster.getWalletSalt(address)
-                          }, wallet_code)
-                     );
+        userWallet = async (address:Address, root?: bigint) => {
+           let userMinter: SandboxContract<JettonMinter>;
+           if(root) {
+               userMinter = blockchain.openContract(
+                   JettonMinter.createFromConfig({
+                       admin: deployer.address,
+                       jetton_content: defaultContent,
+                       wallet_code,
+                       merkle_root: root
+                   }, minter_code)
+               );
+               const smc = await blockchain.getContract(userMinter.address);
+               if(smc.accountState == undefined || smc.accountState.type !== 'active') {
+                   await userMinter.sendDeploy(deployer.getSender(), toNano('100'));
+               }
+           }
+           else {
+               userMinter = cMaster;
+           }
+           const newWallet = JettonWallet.createFromConfig({
+               ownerAddress: address,
+               jettonMasterAddress: cMaster.address,
+               merkleRoot: root ?? merkleRoot,
+               salt: await userMinter.getWalletSalt(address)
+           }, wallet_code);
+           return blockchain.openContract(newWallet);
+       }
        getContractData = async (address: Address) => {
          const smc = await blockchain.getContract(address);
          if(!smc.account.account)

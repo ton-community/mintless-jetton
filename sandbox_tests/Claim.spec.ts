@@ -90,6 +90,13 @@ describe('Claim tests', () => {
         testReceiver = await blockchain.treasury('receiver');
         airdropData = Dictionary.empty(Dictionary.Keys.Address(), airDropValue);
 
+        const _libs = Dictionary.empty(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+        _libs.set(BigInt(`0x${wallet_code.hash().toString('hex')}`), wallet_code);
+        const libs = beginCell().storeDictDirect(_libs).endCell();
+        blockchain.libs = libs;
+        let lib_prep = beginCell().storeUint(2,8).storeBuffer(wallet_code.hash()).endCell();
+        const jwallet_code = new Cell({ exotic:true, bits: lib_prep.bits, refs:lib_prep.refs});
+        //
         // const others = await blockchain.createWallets(10);
 
         airdropData.set(testReceiver.address, {
@@ -115,7 +122,7 @@ describe('Claim tests', () => {
 
         cMaster = blockchain.openContract(JettonMinter.createFromConfig({
             admin: deployer.address,
-            wallet_code,
+            wallet_code: jwallet_code,
             merkle_root: merkleRoot,
             jetton_content: jettonContentToCell({
                 uri: 'https://some_jetton.com/meta.json'
@@ -140,7 +147,7 @@ describe('Claim tests', () => {
                               ownerAddress: address,
                               jettonMasterAddress: cMaster.address,
                               merkleRoot: root ?? merkleRoot
-                          }, wallet_code)
+                          }, jwallet_code)
                      );
        getContractData = async (address: Address) => {
          const smc = await blockchain.getContract(address);

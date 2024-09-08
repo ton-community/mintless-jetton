@@ -170,7 +170,7 @@ export class JettonMinter implements Contract {
                    from?: Address | null,
                    response_addr?: Address | null,
                    customPayload?: Cell | null,
-                   forward_ton_amount: bigint = toNano('0.05'), total_ton_amount: bigint = toNano('0.1')) {
+                   forward_ton_amount: bigint = toNano('0.05'), total_ton_amount: bigint = toNano('0.2')) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: JettonMinter.mintMessage(to, jetton_amount, from, response_addr, customPayload, forward_ton_amount, total_ton_amount),

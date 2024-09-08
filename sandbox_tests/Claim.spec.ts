@@ -298,7 +298,7 @@ describe('Claim tests', () => {
     it('claim fee should be accounted for in transfer', async () => {
         const claimPayload = JettonWallet.claimPayload(receiverProof);
         const testJetton = await userWallet(testReceiver.address);
-        const minimalTransfer = toNano('0.029958872'); // Just a constant from main test suite
+        const minimalTransfer = toNano('0.030050353'); // Just a constant from main test suite
 
         // Should fail, because claim cost is not accounted in minimal fee
 
@@ -315,7 +315,7 @@ describe('Claim tests', () => {
             exitCode: Errors.not_enough_gas
         });
 
-        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.045'),
+        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.05'),
                                             1n, deployer.address,
                                             deployer.address, claimPayload, 1n);
 
@@ -345,7 +345,7 @@ describe('Claim tests', () => {
 
         const testJetton = await userWallet(testReceiver.address, newRoot);
 
-        let res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.045'), // Success value from previous case
+        let res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.05'), // Success value from previous case
                                                 1n, deployer.address,
                                                 deployer.address, claimPayload, 1n);
 

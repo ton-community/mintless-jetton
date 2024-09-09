@@ -849,7 +849,7 @@ describe('JettonWallet', () => {
         await testSendFees(minimalFee - 1n, forwardAmount, null, null, false);
         // Now should succeed
         await testSendFees(minimalFee, forwardAmount, null, null, true);
-        console.log("Minimal transfer fee:", fromNano(minimalFee));
+        console.log("Minimal transfer fee no notification:", fromNano(minimalFee));
     });
     it('forward_payload should impact transfer fees', async () => {
         let jettonAmount  = 1n;
@@ -875,6 +875,11 @@ describe('JettonWallet', () => {
         minimalFee = calcSendFees(send_gas_fee, receive_gas_fee, minFwdFee, forwardAmount, min_tons_for_storage);
         // And succeed again, after updating calculations
         await testSendFees(minimalFee, forwardAmount, forwardPayload, null, true);
+        minFwdFee  = estimateTransferFwd(jettonAmount, 1n, null, null);
+        minimalFee = calcSendFees(send_gas_fee, receive_gas_fee,
+                                  minFwdFee, 1n, min_tons_for_storage);
+        console.log(`Minimal transfer fee with notification(empty forward):${fromNano(minimalFee)}`);
+
         // Custom payload impacts fee, because forwardAmount is calculated based on inMsg fwdFee field
         /*
         const customPayload = beginCell().storeUint(getRandomInt(100000, 200000), 128).endCell();

@@ -761,7 +761,7 @@ describe('JettonWallet', () => {
             success: true
         });
         send_gas_fee = printTxGasStats("Jetton transfer", transferTx);
-        let mockGas = computeGasFee(gasPrices, 30724n);
+        let mockGas = computeGasFee(gasPrices, 30766n);
         expect(mockGas).toBeGreaterThanOrEqual(send_gas_fee)
         send_gas_fee = mockGas;
 

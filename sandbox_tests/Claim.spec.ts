@@ -157,7 +157,7 @@ describe('Claim tests', () => {
            }
            const newWallet = JettonWallet.createFromConfig({
                ownerAddress: address,
-               jettonMasterAddress: cMaster.address,
+               jettonMasterAddress: userMinter.address,
                merkleRoot: root ?? merkleRoot,
                salt: await userMinter.getWalletSalt(address)
            }, wallet_code);

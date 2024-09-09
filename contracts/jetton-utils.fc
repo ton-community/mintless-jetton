@@ -4,6 +4,7 @@
 const int STATUS_SIZE = 4;
 const int MERKLE_ROOT_SIZE = 256;
 const int SALT_SIZE = 10; ;; if changed, update calculate_jetton_wallet_data_hash_cheap and pack_jetton_wallet_data_hash_base (data bits size and padding)
+const int ITERATION_NUM = 32; ;; should be less than 2^SALT_SIZE-1
 
 cell pack_jetton_wallet_data(int status, int balance, slice owner_address, slice jetton_master_address, int merkle_root, int salt) inline {
     ;; Note that for
@@ -165,15 +166,15 @@ cell calculate_jetton_wallet_state_init_internal(slice owner_address, slice jett
             min_distance = distance;
             min_salt = salt;
         }
-        stop = (salt == 32); ;;(min_distance == 0) | (salt == 0x32); TODO uncomment when gas is measured
+        stop = (salt == ITERATION_NUM) | (min_distance == 0);
     } until (stop);
     cell state_init = begin_cell()
         .store_uint(0, 2) ;; 0b00 - No split_depth; No special
         .store_maybe_ref(jetton_wallet_code)
-        .store_maybe_ref(jetton_wallet_data_base.store_uint(salt, SALT_SIZE).end_cell()) ;; data ;;TODO change to min_salt
+        .store_maybe_ref(jetton_wallet_data_base.store_uint(min_salt, SALT_SIZE).end_cell())
         .store_uint(0, 1) ;; Empty libraries
         .end_cell();
-    return [state_init, salt];
+    return [state_init, min_salt];
 }
 
 [cell, int] calculate_jetton_wallet_properties(slice owner_address, slice jetton_master_address, cell jetton_wallet_code, int merkle_root) inline {
@@ -188,6 +189,7 @@ cell calculate_jetton_wallet_state_init_internal(slice owner_address, slice jett
     int salt = -1;
     int min_salt = 0;
     cell state_init = null();
+    cell min_state_init = null();
     (_, int owner_prefix) = parse_std_addr(owner_address);
     owner_prefix = owner_prefix >> (256 - 4);
 
@@ -199,10 +201,11 @@ cell calculate_jetton_wallet_state_init_internal(slice owner_address, slice jett
         if (distance < min_distance) {
             min_distance = distance;
             min_salt = salt;
+            min_state_init = state_init;
         }
-        stop = (salt == 0x32); ;;(min_distance == 0) | (salt == 0xf);
+        stop = (salt == ITERATION_NUM) | (min_distance == 0);
     } until (stop);
-    return [state_init, salt];
+    return [min_state_init, min_salt];
 }
 
 cell calculate_jetton_wallet_state_init(slice owner_address, slice jetton_master_address, cell jetton_wallet_code, int merkle_root) inline {

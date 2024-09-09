@@ -318,7 +318,7 @@ describe('Claim tests', () => {
             exitCode: Errors.not_enough_gas
         });
 
-        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.12'),
+        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.13'),
                                             1n, deployer.address,
                                             deployer.address, claimPayload, 1n);
 
@@ -348,7 +348,7 @@ describe('Claim tests', () => {
 
         const testJetton = await userWallet(testReceiver.address, newRoot);
 
-        let res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.12'), // Success value from previous case
+        let res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.13'), // Success value from previous case
                                                 1n, deployer.address,
                                                 deployer.address, claimPayload, 1n);
 

@@ -761,7 +761,7 @@ describe('JettonWallet', () => {
             success: true
         });
         send_gas_fee = printTxGasStats("Jetton transfer", transferTx);
-        let mockGas = computeGasFee(gasPrices, 29700n);
+        let mockGas = computeGasFee(gasPrices, 30724n);
         expect(mockGas).toBeGreaterThanOrEqual(send_gas_fee)
         send_gas_fee = mockGas;
 
@@ -772,7 +772,7 @@ describe('JettonWallet', () => {
             success: true
         });
         receive_gas_fee = printTxGasStats("Receive jetton", receiveTx);
-        mockGas = computeGasFee(gasPrices, 31500n);
+        mockGas = computeGasFee(gasPrices, 32480n);
         expect(mockGas).toBeGreaterThanOrEqual(receive_gas_fee);
         receive_gas_fee = mockGas;
 
@@ -1048,7 +1048,7 @@ describe('JettonWallet', () => {
             burn_gas_fee          = actualSent;
             burn_notification_fee = actualRecv;
             burn_gas_fee = computeGasFee(gasPrices, 6148n);
-            burn_notification_fee = computeGasFee(gasPrices, 27720n);
+            burn_notification_fee = computeGasFee(gasPrices, 28680n);
             expect(burn_gas_fee).toBeGreaterThanOrEqual(actualSent);
             expect(burn_notification_fee).toBeGreaterThanOrEqual(actualRecv);
     });

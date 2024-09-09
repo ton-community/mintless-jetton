@@ -44,16 +44,16 @@ const BURN_NOTIFICATION_CELLS = 1; ;; body always in ref
 ;;resulting gas consumption is printed to the console.
 
 ;;- `SEND_TRANSFER_GAS_CONSUMPTION` [/sandbox_tests/JettonWallet.spec.ts#L753](L753)
-const SEND_TRANSFER_GAS_CONSUMPTION    = 29700;
+const SEND_TRANSFER_GAS_CONSUMPTION    = 30724;
 
 ;;- `RECEIVE_TRANSFER_GAS_CONSUMPTION` [/sandbox_tests/JettonWallet.spec.ts#L762](L762)
-const RECEIVE_TRANSFER_GAS_CONSUMPTION = 31500;
+const RECEIVE_TRANSFER_GAS_CONSUMPTION = 32480;
 
 ;;- `SEND_BURN_GAS_CONSUMPTION` [/sandbox_tests/JettonWallet.spec.ts#L1032](L1032)
 const SEND_BURN_GAS_CONSUMPTION    = 6148;
 
 ;;- `RECEIVE_BURN_GAS_CONSUMPTION` [/sandbox_tests/JettonWallet.spec.ts#L1033](L1033)
-const RECEIVE_BURN_GAS_CONSUMPTION = 27720;
+const RECEIVE_BURN_GAS_CONSUMPTION = 28680;
 
 
 int calculate_jetton_wallet_min_storage_fee() inline {

@@ -57,9 +57,6 @@ global int salt;
     cell custom_payload = in_msg_body~load_maybe_ref();
     int mode = SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE | SEND_MODE_BOUNCE_ON_ACTION_FAIL;
     ifnot(custom_payload.null?()) {
-        throw_unless(error::non_canonical_address,
-            equal_slices_bits(my_address(),
-                calculate_user_jetton_wallet_address(owner_address, jetton_master_address, my_code(), merkle_root)));
         slice cps = custom_payload.begin_parse();
         int cp_op = cps~load_op();
         throw_unless(error::unknown_custom_payload, cp_op == op::merkle_airdrop_claim);

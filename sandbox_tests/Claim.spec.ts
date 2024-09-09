@@ -1,11 +1,14 @@
-import { Address, beginCell, BitBuilder, Cell, Dictionary, DictionaryValue, exoticMerkleProof, exoticPruned, toNano } from '@ton/core';
+import { Address, beginCell, BitBuilder, Cell, Dictionary, DictionaryValue, exoticMerkleProof, exoticPruned, fromNano, toNano } from '@ton/core';
 import { compile } from '@ton/blueprint';
-import { Blockchain, BlockchainSnapshot, EmulationError, SandboxContract, TreasuryContract } from '@ton/sandbox';
+import { Blockchain, BlockchainSnapshot, EmulationError, SandboxContract, TreasuryContract, internal } from '@ton/sandbox';
 import '@ton/test-utils';
 import {jettonContentToCell, JettonMinter} from '../wrappers/JettonMinter';
 import { JettonWallet, jettonWalletConfigToCell } from '../wrappers/JettonWallet';
 import { buff2bigint, getRandomInt, getRandomTon, randomAddress, testJettonInternalTransfer } from './utils';
 import { Errors, Op } from '../wrappers/JettonConstants';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import { computedGeneric, computeGasFee, getGasPrices } from '../gasUtils';
 
 type AirdropData = {
     amount: bigint,
@@ -80,6 +83,10 @@ describe('Claim tests', () => {
 
     let userWallet: (address: Address, root?: bigint) => Promise<SandboxContract<JettonWallet>>;
     let getContractData:(address: Address) => Promise<Cell>;
+    // Minimal transfer cost no claim
+    const minimalTransfer = toNano('0.073225413');
+    // Transfer compute phase gas
+    const transferNoClaim = 30766n;
 
     beforeAll(async () => {
         wallet_code = await compile('JettonWallet');
@@ -301,7 +308,6 @@ describe('Claim tests', () => {
     it('claim fee should be accounted for in transfer', async () => {
         const claimPayload = JettonWallet.claimPayload(receiverProof);
         const testJetton = await userWallet(testReceiver.address);
-        const minimalTransfer = toNano('0.073225413');
 
         // Should fail, because claim cost is not accounted in minimal fee
 
@@ -332,6 +338,7 @@ describe('Claim tests', () => {
     it('claim fee should be dynamic based on dictionary lookup cost', async () => {
         // Let's try much larger dictionary
 
+        /*
         for(let i = 0; i < 1000; i++) {
             airdropData.set(randomAddress(), {
                 amount: toNano('100'),
@@ -341,36 +348,74 @@ describe('Claim tests', () => {
         }
 
         const testTree = beginCell().storeDictDirect(airdropData).endCell();
+        */
 
-        const newRoot  = buff2bigint(testTree.hash(0));
-        const newProof = airdropData.generateMerkleProof(testReceiver.address);
+        const proofString = await readFile(join('sandbox_tests','proof'), {encoding: 'utf8'});
+        const parts = proofString.split(',');
+        const testAddress = Address.parse(parts[0]);
+        const newProof = Cell.fromBase64(parts[1]);
+        console.log("New proof depth:", newProof.depth(0));
+        const newRoot  = buff2bigint(newProof.refs[0].hash(0));
+        console.log("New root:", newRoot.toString(16));
         const claimPayload = JettonWallet.claimPayload(newProof);
 
-        const testJetton = await userWallet(testReceiver.address, newRoot);
+        const testJetton = await userWallet(testAddress, newRoot);
+        const deployerJetton = await userWallet(deployer.address, newRoot);
+        const balanceBefore  = await deployerJetton.getJettonBalance();
+        const testSender = blockchain.sender(testAddress);
 
-        let res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.13'), // Success value from previous case
+        const transferMessage = JettonWallet.transferMessage(1n, deployer.address,
+                                                             deployer.address,
+                                                             claimPayload, 1n);
+        let res = await blockchain.sendMessage(internal({
+            to: testJetton.address,
+            from: testAddress,
+            body: transferMessage,
+            value: toNano('0.05'),
+            stateInit: testJetton.init
+        }));
+        /*
+        let res = await testJetton.sendTransfer(testSender, toNano('0.13'), // Success value from previous case
                                                 1n, deployer.address,
                                                 deployer.address, claimPayload, 1n);
+        */
 
         expect(res.transactions).toHaveTransaction({
             on: testJetton.address,
-            from: testReceiver.address,
+            from: testAddress,
             op:Op.transfer,
             aborted: true,
             success: false,
             exitCode: Errors.not_enough_gas
         });
 
-        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('1'),
+        /*
+        res = await testJetton.sendTransfer(testSender, toNano('1'),
                                             1n, deployer.address,
                                             deployer.address, claimPayload, 1n);
+        */
+
+        res = await blockchain.sendMessage(internal({
+            to: testJetton.address,
+            from: testAddress,
+            body: transferMessage,
+            value: toNano('1'),
+            stateInit: testJetton.init
+        }));
 
         expect(res.transactions).toHaveTransaction({
             on: testJetton.address,
-            from: testReceiver.address,
+            from: testAddress,
             op:Op.transfer,
             success: true,
         });
+        expect(await deployerJetton.getJettonBalance()).toEqual(balanceBefore + 1n);
+        const claimTransferCompute = computedGeneric(res.transactions[1]);
+        const gasPrices = getGasPrices(blockchain.config, 0);
+        const gasDelta  = claimTransferCompute.gasUsed - transferNoClaim;
+        console.log(`Transfer additional gas:${gasDelta}`);
+        console.log(`Just transfer:${minimalTransfer}`);
+        console.log(`Total claim + transfer cost ${fromNano(minimalTransfer + computeGasFee(gasPrices, gasDelta))}`);
     });
     describe('Proofs', () => {
     it('should reject proof from different root', async () => {

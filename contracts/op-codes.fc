@@ -36,3 +36,4 @@ const error::airdrop_already_claimed = 54;
 const error::airdrop_not_ready = 55;
 const error::airdrop_finished = 56;
 const error::unknown_custom_payload = 57;
+const error::non_canonical_address = 58;

@@ -1,9 +1,12 @@
+#include "stdlib.fc";
 #include "workchain.fc";
 
 const int STATUS_SIZE = 4;
 const int MERKLE_ROOT_SIZE = 256;
+const int SALT_SIZE = 10; ;; if changed, update calculate_jetton_wallet_data_hash_cheap and pack_jetton_wallet_data_hash_base (data bits size and padding)
+const int ITERATION_NUM = 32; ;; should be less than 2^SALT_SIZE-1
 
-cell pack_jetton_wallet_data(int status, int balance, slice owner_address, slice jetton_master_address, int merkle_root) inline {
+cell pack_jetton_wallet_data(int status, int balance, slice owner_address, slice jetton_master_address, int merkle_root, int salt) inline {
     ;; Note that for
     return begin_cell()
     .store_uint(status, STATUS_SIZE)
@@ -11,10 +14,109 @@ cell pack_jetton_wallet_data(int status, int balance, slice owner_address, slice
     .store_slice(owner_address)
     .store_slice(jetton_master_address)
     .store_uint(merkle_root, MERKLE_ROOT_SIZE)
+    .store_uint(salt, SALT_SIZE)
     .end_cell();
 }
 
-cell calculate_jetton_wallet_state_init(slice owner_address, slice jetton_master_address, cell jetton_wallet_code, int merkle_root) inline {
+int hash_sha256(builder b) asm "1 PUSHINT HASHEXT_SHA256";
+
+;; Trick for gas saving originally created by @NickNekilov
+int calculate_account_hash_cheap(int code_hash, int code_depth, int data_hash, int data_depth) inline {
+    return begin_cell()
+        ;; refs_descriptor:bits8 bits_descriptor:bits8
+        .store_uint(
+            ;; refs_descriptor: ref_count + ((exotic? & 1) * 8) + (mask * 32)
+            ;; we have 2 refs (code+data), non-exotic, zero mask
+            (2 << 16) |
+            ;; bits_descriptor: floor(bit_count/8) + ceil(bit_count/8)
+            ;; we have 5 bit of data, bits_descriptor = 0 + 1 = 1
+            (1 << 8) |
+            ;; data: actual data: (split_depth, special,code, data, library) and also 3 bit for ceil number of bits
+            ;; [0b00110] + [0b100]
+            0x34,
+            24
+        )
+        ;;depth descriptors
+        .store_uint(code_depth, 16)
+        .store_uint(data_depth, 16)
+        ;; ref hashes
+        .store_uint(code_hash, 256)
+        .store_uint(data_hash, 256)
+        .hash_sha256();
+}
+
+builder calculate_account_hash_base_slice(int code_hash, int code_depth, int data_depth) inline {
+    return begin_cell()
+    ;; refs_descriptor:bits8 bits_descriptor:bits8
+        .store_uint(
+            ;; refs_descriptor: ref_count + ((exotic? & 1) * 8) + (mask * 32)
+            ;; we have 2 refs (code+data), non-exotic, zero mask
+            (2 << 16) |
+            ;; bits_descriptor: floor(bit_count/8) + ceil(bit_count/8)
+            ;; we have 5 bit of data, bits_descriptor = 0 + 1 = 1
+            (1 << 8) |
+            ;; data: actual data: (split_depth, special,code, data, library) and also 3 bit for ceil number of bits
+            ;; [0b00110] + [0b100]
+            0x34,
+            24
+        )
+    ;;depth descriptors
+        .store_uint(code_depth, 16)
+        .store_uint(data_depth, 16)
+    ;; ref hashes
+        .store_uint(code_hash, 256);
+}
+
+int calculate_account_hash_cheap_with_base_builder(builder base_builder, int data_hash) inline {
+    return base_builder
+           .store_uint(data_hash, 256)
+           .hash_sha256();
+}
+
+builder calculate_jetton_wallet_address(cell state_init) inline {
+    {-
+    https://github.com/ton-blockchain/ton/blob/8a9ff339927b22b72819c5125428b70c406da631/crypto/block/block.tlb#L105
+    addr_std$10 anycast:(Maybe Anycast) workchain_id:int8 address:bits256  = MsgAddressInt;
+    -}
+    return begin_cell()
+        .store_uint(4, 3) ;; 0b100 = addr_std$10 tag; No anycast
+        .store_int(MY_WORKCHAIN, 8)
+        .store_uint(cell_hash(state_init), 256);
+}
+
+builder pack_jetton_wallet_data_builder_base(int status, int balance, slice owner_address, slice jetton_master_address, int merkle_root) inline {
+    return begin_cell()
+        .store_uint(status, 4)
+        .store_coins(balance)
+        .store_slice(owner_address)
+        .store_slice(jetton_master_address)
+        .store_uint(merkle_root, 256);
+}
+
+builder pack_jetton_wallet_data_hash_base(builder wallet_data_base) inline {
+    return begin_cell()
+    ;; refs_descriptor:bits8 bits_descriptor:bits8
+        .store_uint(
+            ;; refs_descriptor: ref_count + ((exotic? & 1) * 8) + (mask * 32)
+            ;; we have 0 refs , non-exotic, zero mask
+            ;;0 |
+            ;; bits_descriptor: floor(bit_count/8) + ceil(bit_count/8)
+            ;; we have 4+4+267+267+256+10 = 808 bit of data, bits_descriptor = 101 + 101 = 202
+            202,
+            16
+        )
+    ;;depth descriptors
+        .store_builder(wallet_data_base);
+}
+
+int calculate_jetton_wallet_data_hash_cheap(builder base, int salt) inline {
+    return base
+           ;; salt 10 bits, no trailing bits needed
+           .store_uint(salt, SALT_SIZE)
+           .hash_sha256();
+}
+
+cell calculate_jetton_wallet_state_init_internal(slice owner_address, slice jetton_master_address, cell jetton_wallet_code, int merkle_root, int salt) inline {
     {-
     https://github.com/ton-blockchain/ton/blob/8a9ff339927b22b72819c5125428b70c406da631/crypto/block/block.tlb#L144
     _ split_depth:(Maybe (## 5)) special:(Maybe TickTock)
@@ -22,35 +124,99 @@ cell calculate_jetton_wallet_state_init(slice owner_address, slice jetton_master
     library:(Maybe ^Cell) = StateInit;
   -}
     return begin_cell()
-    .store_uint(0, 2) ;; 0b00 - No split_depth; No special
-    .store_maybe_ref(jetton_wallet_code)
-    .store_maybe_ref(
-        pack_jetton_wallet_data(
-            0, ;; status
-            0, ;; balance
-            owner_address,
-            jetton_master_address,
-            merkle_root)
-    )
-    .store_uint(0, 1) ;; Empty libraries
-    .end_cell();
+        .store_uint(0, 2) ;; 0b00 - No split_depth; No special
+        .store_maybe_ref(jetton_wallet_code)
+        .store_maybe_ref(
+            pack_jetton_wallet_data(
+                0, ;; status
+                0, ;; balance
+                owner_address,
+                jetton_master_address,
+                merkle_root,
+                salt)
+        )
+        .store_uint(0, 1) ;; Empty libraries
+        .end_cell();
 }
 
-slice calculate_jetton_wallet_address(cell state_init) inline {
+[cell, int] calculate_jetton_wallet_properties_cheap(slice owner_address, slice jetton_master_address, cell jetton_wallet_code, int merkle_root) inline {
     {-
-    https://github.com/ton-blockchain/ton/blob/8a9ff339927b22b72819c5125428b70c406da631/crypto/block/block.tlb#L105
-    addr_std$10 anycast:(Maybe Anycast) workchain_id:int8 address:bits256  = MsgAddressInt;
-    -}
-    return begin_cell()
-    .store_uint(4, 3) ;; 0b100 = addr_std$10 tag; No anycast
-    .store_int(MY_WORKCHAIN, 8)
-    .store_uint(cell_hash(state_init), 256)
-    .end_cell()
-    .begin_parse();
+    https://github.com/ton-blockchain/ton/blob/8a9ff339927b22b72819c5125428b70c406da631/crypto/block/block.tlb#L144
+    _ split_depth:(Maybe (## 5)) special:(Maybe TickTock)
+    code:(Maybe ^Cell) data:(Maybe ^Cell)
+    library:(Maybe ^Cell) = StateInit;
+  -}
+    int stop = false;
+    int min_distance = 0xffff;
+    int salt = -1;
+    int min_salt = 0;
+    (_, int owner_prefix) = parse_std_addr(owner_address);
+    owner_prefix = owner_prefix >> (256 - 4);
+    builder jetton_wallet_data_base = pack_jetton_wallet_data_builder_base(0, 0, owner_address, jetton_master_address, merkle_root);
+    builder jetton_wallet_data_hash_base = pack_jetton_wallet_data_hash_base(jetton_wallet_data_base);
+    builder jetton_wallet_account_hash_base = calculate_account_hash_base_slice(cell_hash(jetton_wallet_code), cell_depth(jetton_wallet_code), 0);
+
+    do {
+        salt += 1;
+        int data_hash = calculate_jetton_wallet_data_hash_cheap(jetton_wallet_data_hash_base, salt);
+        int account_hash = calculate_account_hash_cheap_with_base_builder(jetton_wallet_account_hash_base, data_hash);
+        int wallet_prefix = account_hash >> (256 - 4);
+        int distance = wallet_prefix ^ owner_prefix;
+        if (distance < min_distance) {
+            min_distance = distance;
+            min_salt = salt;
+        }
+        stop = (salt == ITERATION_NUM) | (min_distance == 0);
+    } until (stop);
+    cell state_init = begin_cell()
+        .store_uint(0, 2) ;; 0b00 - No split_depth; No special
+        .store_maybe_ref(jetton_wallet_code)
+        .store_maybe_ref(jetton_wallet_data_base.store_uint(min_salt, SALT_SIZE).end_cell())
+        .store_uint(0, 1) ;; Empty libraries
+        .end_cell();
+    return [state_init, min_salt];
 }
+
+[cell, int] calculate_jetton_wallet_properties(slice owner_address, slice jetton_master_address, cell jetton_wallet_code, int merkle_root) inline {
+    {-
+    https://github.com/ton-blockchain/ton/blob/8a9ff339927b22b72819c5125428b70c406da631/crypto/block/block.tlb#L144
+    _ split_depth:(Maybe (## 5)) special:(Maybe TickTock)
+    code:(Maybe ^Cell) data:(Maybe ^Cell)
+    library:(Maybe ^Cell) = StateInit;
+  -}
+    int stop = false;
+    int min_distance = 0xffff;
+    int salt = -1;
+    int min_salt = 0;
+    cell state_init = null();
+    cell min_state_init = null();
+    (_, int owner_prefix) = parse_std_addr(owner_address);
+    owner_prefix = owner_prefix >> (256 - 4);
+
+    do {
+        salt += 1;
+        state_init = calculate_jetton_wallet_state_init_internal(owner_address, jetton_master_address, jetton_wallet_code, merkle_root, salt);
+        int wallet_prefix = cell_hash(state_init) >> (256 - 4);
+        int distance = wallet_prefix ^ owner_prefix;
+        if (distance < min_distance) {
+            min_distance = distance;
+            min_salt = salt;
+            min_state_init = state_init;
+        }
+        stop = (salt == ITERATION_NUM) | (min_distance == 0);
+    } until (stop);
+    return [min_state_init, min_salt];
+}
+
+cell calculate_jetton_wallet_state_init(slice owner_address, slice jetton_master_address, cell jetton_wallet_code, int merkle_root) inline {
+    [cell state_init, int salt] = calculate_jetton_wallet_properties_cheap(owner_address, jetton_master_address, jetton_wallet_code, merkle_root);
+    return state_init;
+}
+
 
 slice calculate_user_jetton_wallet_address(slice owner_address, slice jetton_master_address, cell jetton_wallet_code, int merkle_root) inline {
-    return calculate_jetton_wallet_address(calculate_jetton_wallet_state_init(owner_address, jetton_master_address, jetton_wallet_code, merkle_root));
+    return calculate_jetton_wallet_address(calculate_jetton_wallet_state_init(owner_address, jetton_master_address, jetton_wallet_code, merkle_root))
+           .end_cell().begin_parse();
 }
 
 () check_either_forward_payload(slice s) impure inline {

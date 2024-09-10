@@ -170,7 +170,7 @@ export class JettonMinter implements Contract {
                    from?: Address | null,
                    response_addr?: Address | null,
                    customPayload?: Cell | null,
-                   forward_ton_amount: bigint = toNano('0.05'), total_ton_amount: bigint = toNano('0.1')) {
+                   forward_ton_amount: bigint = toNano('0.05'), total_ton_amount: bigint = toNano('0.2')) {
         await provider.internal(via, {
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             body: JettonMinter.mintMessage(to, jetton_amount, from, response_addr, customPayload, forward_ton_amount, total_ton_amount),
@@ -387,7 +387,16 @@ export class JettonMinter implements Contract {
             type: 'slice',
             cell: beginCell().storeAddress(owner).endCell()
         }])
-        return res.stack.readAddress()
+        return res.stack.readAddress();
+    }
+
+    async getWalletSalt(provider: ContractProvider, owner: Address): Promise<bigint> {
+        const res = await provider.get('get_wallet_state_init_and_salt', [{
+            type: 'slice',
+            cell: beginCell().storeAddress(owner).endCell()
+        }])
+        let stateInit = res.stack.readCell();
+        return res.stack.readBigNumber();
     }
 
     async getJettonData(provider: ContractProvider) {

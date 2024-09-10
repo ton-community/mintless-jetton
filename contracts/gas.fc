@@ -20,7 +20,7 @@ const MIN_STORAGE_DURATION = 5 * 365 * 24 * 3600; ;; 5 years
 ;;Get calculated in a separate test file [/sandbox_tests/StateInit.spec.ts](StateInit.spec.ts)
 
 ;;- `JETTON_WALLET_BITS` [/sandbox_tests/StateInit.spec.ts#L92](L92)
-const JETTON_WALLET_BITS  = 1289;
+const JETTON_WALLET_BITS  = 1299;
 
 ;;- `JETTON_WALLET_CELLS`: [/sandbox_tests/StateInit.spec.ts#L92](L92)
 const JETTON_WALLET_CELLS = 3;
@@ -29,7 +29,7 @@ const JETTON_WALLET_CELLS = 3;
 ;; StateInit and AccountStorage (https://github.com/ton-blockchain/ton/blob/master/crypto/block/block.tlb)
 ;; we count bits as if balances are max possible
 ;;- `JETTON_WALLET_INITSTATE_BITS` [/sandbox_tests/StateInit.spec.ts#L95](L95)
-const JETTON_WALLET_INITSTATE_BITS  = 1187;
+const JETTON_WALLET_INITSTATE_BITS  = 1197;
 ;;- `JETTON_WALLET_INITSTATE_CELLS` [/sandbox_tests/StateInit.spec.ts#L95](L95)
 const JETTON_WALLET_INITSTATE_CELLS = 3;
 
@@ -44,16 +44,16 @@ const BURN_NOTIFICATION_CELLS = 1; ;; body always in ref
 ;;resulting gas consumption is printed to the console.
 
 ;;- `SEND_TRANSFER_GAS_CONSUMPTION` [/sandbox_tests/JettonWallet.spec.ts#L753](L753)
-const SEND_TRANSFER_GAS_CONSUMPTION    = 9532;
+const SEND_TRANSFER_GAS_CONSUMPTION    = 30766;
 
 ;;- `RECEIVE_TRANSFER_GAS_CONSUMPTION` [/sandbox_tests/JettonWallet.spec.ts#L762](L762)
-const RECEIVE_TRANSFER_GAS_CONSUMPTION = 10531;
+const RECEIVE_TRANSFER_GAS_CONSUMPTION = 32480;
 
 ;;- `SEND_BURN_GAS_CONSUMPTION` [/sandbox_tests/JettonWallet.spec.ts#L1032](L1032)
-const SEND_BURN_GAS_CONSUMPTION    = 6023;
+const SEND_BURN_GAS_CONSUMPTION    = 6148;
 
 ;;- `RECEIVE_BURN_GAS_CONSUMPTION` [/sandbox_tests/JettonWallet.spec.ts#L1033](L1033)
-const RECEIVE_BURN_GAS_CONSUMPTION = 7059;
+const RECEIVE_BURN_GAS_CONSUMPTION = 28680;
 
 
 int calculate_jetton_wallet_min_storage_fee() inline {

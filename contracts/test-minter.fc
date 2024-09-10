@@ -225,9 +225,15 @@ slice get_wallet_address(slice owner_address) method_id {
     return calculate_user_jetton_wallet_address(owner_address, my_address(), jetton_wallet_code, merkle_root);
 }
 
-(cell, int) get_wallet_state_init_and_salt(slice owner_address) method_id {
+(cell, int) get_wallet_state_init_and_salt_cheap(slice owner_address) method_id {
     (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();
     [cell state_init, int salt] = calculate_jetton_wallet_properties_cheap(owner_address, my_address(), jetton_wallet_code, merkle_root);
+    return (state_init, salt);
+}
+
+(cell, int) get_wallet_state_init_and_salt(slice owner_address) method_id {
+        (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();
+        [cell state_init, int salt] = calculate_jetton_wallet_properties(owner_address, my_address(), jetton_wallet_code, merkle_root);
     return (state_init, salt);
 }
 

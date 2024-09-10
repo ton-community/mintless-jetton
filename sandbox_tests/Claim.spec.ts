@@ -1,11 +1,15 @@
-import { Address, beginCell, BitBuilder, Cell, Dictionary, DictionaryValue, exoticMerkleProof, exoticPruned, toNano } from '@ton/core';
+import { Address, beginCell, BitBuilder, Cell, Dictionary, DictionaryValue, exoticMerkleProof, exoticPruned, fromNano, storeMessage, toNano } from '@ton/core';
 import { compile } from '@ton/blueprint';
-import { Blockchain, BlockchainSnapshot, EmulationError, SandboxContract, TreasuryContract } from '@ton/sandbox';
+import { Blockchain, BlockchainSnapshot, EmulationError, SandboxContract, TreasuryContract, internal } from '@ton/sandbox';
 import '@ton/test-utils';
 import {jettonContentToCell, JettonMinter} from '../wrappers/JettonMinter';
 import { JettonWallet, jettonWalletConfigToCell } from '../wrappers/JettonWallet';
 import { buff2bigint, getRandomInt, getRandomTon, randomAddress, testJettonInternalTransfer } from './utils';
 import { Errors, Op } from '../wrappers/JettonConstants';
+import { readFile } from 'fs/promises';
+import { join } from 'path';
+import { calcStorageFee, collectCellStats, computedGeneric, computeFwdFeesVerbose, computeGasFee, getMsgPrices, getStoragePrices, StorageStats } from '../gasUtils';
+import { findTransactionRequired } from '@ton/test-utils';
 
 type AirdropData = {
     amount: bigint,
@@ -69,6 +73,7 @@ describe('Claim tests', () => {
     let initialState: BlockchainSnapshot;
     let claimedAlready: BlockchainSnapshot;
     let merkleRoot: bigint;
+    let defaultContent: Cell;
     let cMaster: SandboxContract<JettonMinter>;
     let airdropData: Dictionary<Address, AirdropData>;
     let airdropCell: Cell;
@@ -79,6 +84,11 @@ describe('Claim tests', () => {
 
     let userWallet: (address: Address, root?: bigint) => Promise<SandboxContract<JettonWallet>>;
     let getContractData:(address: Address) => Promise<Cell>;
+    let minStorage: bigint;
+    // Minimal transfer cost no claim
+    const minimalTransfer = toNano('0.074989413');
+    // Transfer compute phase gas
+    const transferNoClaim = 30766n;
 
     beforeAll(async () => {
         wallet_code = await compile('JettonWallet');
@@ -90,6 +100,13 @@ describe('Claim tests', () => {
         testReceiver = await blockchain.treasury('receiver');
         airdropData = Dictionary.empty(Dictionary.Keys.Address(), airDropValue);
 
+        const _libs = Dictionary.empty(Dictionary.Keys.BigUint(256), Dictionary.Values.Cell());
+        _libs.set(BigInt(`0x${wallet_code.hash().toString('hex')}`), wallet_code);
+        const libs = beginCell().storeDictDirect(_libs).endCell();
+        blockchain.libs = libs;
+        let lib_prep = beginCell().storeUint(2,8).storeBuffer(wallet_code.hash()).endCell();
+        const jwallet_code = new Cell({ exotic:true, bits: lib_prep.bits, refs:lib_prep.refs});
+        //
         // const others = await blockchain.createWallets(10);
 
         airdropData.set(testReceiver.address, {
@@ -113,13 +130,14 @@ describe('Claim tests', () => {
         receiverProof = airdropData.generateMerkleProof(testReceiver.address);
 
 
+        defaultContent = jettonContentToCell({
+                uri: 'https://some_jetton.com/meta.json'
+        })
         cMaster = blockchain.openContract(JettonMinter.createFromConfig({
             admin: deployer.address,
             wallet_code,
             merkle_root: merkleRoot,
-            jetton_content: jettonContentToCell({
-                uri: 'https://some_jetton.com/meta.json'
-            })
+            jetton_content: defaultContent
         }, minter_code));
 
         const masterDeploy = await cMaster.sendDeploy(deployer.getSender(), toNano('1000'));
@@ -134,14 +152,33 @@ describe('Claim tests', () => {
 
         initialState = blockchain.snapshot();
 
-        userWallet = async (address:Address, root?: bigint) => blockchain.openContract(
-        // From config because that's the way to attach state init to wrapper messages
-                          JettonWallet.createFromConfig({
-                              ownerAddress: address,
-                              jettonMasterAddress: cMaster.address,
-                              merkleRoot: root ?? merkleRoot
-                          }, wallet_code)
-                     );
+        userWallet = async (address:Address, root?: bigint) => {
+           let userMinter: SandboxContract<JettonMinter>;
+           if(root) {
+               userMinter = blockchain.openContract(
+                   JettonMinter.createFromConfig({
+                       admin: deployer.address,
+                       jetton_content: defaultContent,
+                       wallet_code,
+                       merkle_root: root
+                   }, minter_code)
+               );
+               const smc = await blockchain.getContract(userMinter.address);
+               if(smc.accountState == undefined || smc.accountState.type !== 'active') {
+                   await userMinter.sendDeploy(deployer.getSender(), toNano('100'));
+               }
+           }
+           else {
+               userMinter = cMaster;
+           }
+           const newWallet = JettonWallet.createFromConfig({
+               ownerAddress: address,
+               jettonMasterAddress: userMinter.address,
+               merkleRoot: root ?? merkleRoot,
+               salt: await userMinter.getWalletSalt(address)
+           }, wallet_code);
+           return blockchain.openContract(newWallet);
+       }
        getContractData = async (address: Address) => {
          const smc = await blockchain.getContract(address);
          if(!smc.account.account)
@@ -165,6 +202,8 @@ describe('Claim tests', () => {
         const userData     = airdropData.get(testReceiver.address)!;
         const transferAmount = getRandomTon(1, 99);
 
+        const smc = await blockchain.getContract(testJetton.address);
+        expect(smc.balance).toBe(0n);
         const res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('1'),
                                                   transferAmount, deployer.address,
                                                   testReceiver.address, claimPayload, 1n);
@@ -182,10 +221,16 @@ describe('Claim tests', () => {
             body: (b) => testJettonInternalTransfer(b!, {
                 amount: transferAmount,
                 from: testReceiver.address
-            })
+            }),
+            success: true
         });
             
 
+        const storagePrices  = getStoragePrices(blockchain.config);
+        const storageStats = new StorageStats(1299, 3);
+        minStorage   = calcStorageFee(storagePrices, storageStats, BigInt(5 * 365 * 24 * 3600));
+
+        expect(smc.balance).toEqual(minStorage);
         expect(await deployerJetton.getJettonBalance()).toEqual(transferAmount);
         expect(await testJetton.getJettonBalance()).toEqual(userData.amount - transferAmount);
         
@@ -281,7 +326,6 @@ describe('Claim tests', () => {
     it('claim fee should be accounted for in transfer', async () => {
         const claimPayload = JettonWallet.claimPayload(receiverProof);
         const testJetton = await userWallet(testReceiver.address);
-        const minimalTransfer = toNano('0.029958872'); // Just a constant from main test suite
 
         // Should fail, because claim cost is not accounted in minimal fee
 
@@ -298,7 +342,7 @@ describe('Claim tests', () => {
             exitCode: Errors.not_enough_gas
         });
 
-        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.045'),
+        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.12'),
                                             1n, deployer.address,
                                             deployer.address, claimPayload, 1n);
 
@@ -312,6 +356,7 @@ describe('Claim tests', () => {
     it('claim fee should be dynamic based on dictionary lookup cost', async () => {
         // Let's try much larger dictionary
 
+        /*
         for(let i = 0; i < 1000; i++) {
             airdropData.set(randomAddress(), {
                 amount: toNano('100'),
@@ -321,36 +366,78 @@ describe('Claim tests', () => {
         }
 
         const testTree = beginCell().storeDictDirect(airdropData).endCell();
+        */
 
-        const newRoot  = buff2bigint(testTree.hash(0));
-        const newProof = airdropData.generateMerkleProof(testReceiver.address);
+        const proofString = await readFile(join('sandbox_tests','proof'), {encoding: 'utf8'});
+        const parts = proofString.split(',');
+        const testAddress = Address.parse(parts[0]);
+        const newProof = Cell.fromBase64(parts[1]);
+        console.log("New proof depth:", newProof.depth(0));
+        const newRoot  = buff2bigint(newProof.refs[0].hash(0));
+        console.log("New root:", newRoot.toString(16));
         const claimPayload = JettonWallet.claimPayload(newProof);
 
-        const testJetton = await userWallet(testReceiver.address, newRoot);
+        const testJetton = await userWallet(testAddress, newRoot);
+        const deployerJetton = await userWallet(deployer.address, newRoot);
+        const balanceBefore  = await deployerJetton.getJettonBalance();
+        const testSender = blockchain.sender(testAddress);
 
-        let res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.045'), // Success value from previous case
-                                                1n, deployer.address,
-                                                deployer.address, claimPayload, 1n);
+        const transferMessage = JettonWallet.transferMessage(1n, deployer.address,
+                                                             testAddress,
+                                                             claimPayload, 1n);
+        const msgPrices = getMsgPrices(blockchain.config, 0);
+        const outMsg = internal({
+            to: testJetton.address,
+            from: testAddress,
+            body: transferMessage,
+            value: toNano('0.12'),
+            stateInit: testJetton.init
+        });
+        if(outMsg.info.type !== 'internal') {
+            throw new Error("no way");
+        }
+        const packed = beginCell().store(storeMessage(outMsg)).endCell();
+        const stats  = collectCellStats(packed, [], true);
+        const fee    = computeFwdFeesVerbose(msgPrices, stats.cells, stats.bits);
+        outMsg.info.forwardFee = fee.remaining;
+        let res = await blockchain.sendMessage(outMsg);
 
         expect(res.transactions).toHaveTransaction({
             on: testJetton.address,
-            from: testReceiver.address,
+            from: testAddress,
             op:Op.transfer,
             aborted: true,
             success: false,
             exitCode: Errors.not_enough_gas
         });
 
-        res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('1'),
-                                            1n, deployer.address,
-                                            deployer.address, claimPayload, 1n);
+        outMsg.info.value.coins = toNano('1');
+        res = await blockchain.sendMessage(outMsg);
 
-        expect(res.transactions).toHaveTransaction({
+        const transferTx = findTransactionRequired(res.transactions,{
             on: testJetton.address,
-            from: testReceiver.address,
+            from: testAddress,
             op:Op.transfer,
             success: true,
         });
+        expect(await deployerJetton.getJettonBalance()).toEqual(balanceBefore + 1n);
+        const claimTransferCompute = computedGeneric(transferTx);
+        /*
+         * Commented, because minTransferFee is measured at max
+         * const gasDelta  = claimTransferCompute.gasUsed - transferNoClaim;
+         * console.log(`Transfer additional gas:${gasDelta}`);
+         * console.log(`Just transfer:${minimalTransfer}`);
+         */
+        const excess =  findTransactionRequired(res.transactions, {
+            on: testAddress,
+            from: deployerJetton.address,
+            op: Op.excesses
+        });
+        const excessMsg = excess.inMessage!;
+        if(excessMsg.info.type !== 'internal') {
+            throw new Error("No way");
+        }
+        console.log(`Claim + transfer cost:${fromNano(toNano('1') - excessMsg.info.value.coins)}`);
     });
     describe('Proofs', () => {
     it('should reject proof from different root', async () => {

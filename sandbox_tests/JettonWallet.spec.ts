@@ -7,7 +7,7 @@ import {findTransactionRequired} from '@ton/test-utils';
 import { compile } from '@ton/blueprint';
 import { randomAddress, getRandomTon, differentAddress, getRandomInt } from './utils';
 import { Op, Errors } from '../wrappers/JettonConstants';
-import { calcStorageFee, collectCellStats, computeFwdFees, computeFwdFeesVerbose, FullFees, GasPrices, getGasPrices, getMsgPrices, getStoragePrices, computedGeneric, storageGeneric, MsgPrices, setGasPrice, setMsgPrices, setStoragePrices, StorageStats, StorageValue } from '../gasUtils';
+import { calcStorageFee, collectCellStats, computeFwdFees, computeFwdFeesVerbose, FullFees, GasPrices, getGasPrices, getMsgPrices, getStoragePrices, computedGeneric, storageGeneric, MsgPrices, setGasPrice, setMsgPrices, setStoragePrices, StorageStats, StorageValue, computeGasFee } from '../gasUtils';
 import { sha256 } from '@ton/crypto';
 
 /*
@@ -76,12 +76,12 @@ describe('JettonWallet', () => {
         blockchain.now = Math.floor(Date.now() / 1000);
         deployer       = await blockchain.treasury('deployer');
         notDeployer    = await blockchain.treasury('notDeployer');
-        walletStats    = new StorageStats(1289, 3);
+        walletStats    = new StorageStats(1299, 3);
         msgPrices      = getMsgPrices(blockchain.config, 0);
         gasPrices      = getGasPrices(blockchain.config, 0);
         storagePrices  = getStoragePrices(blockchain.config);
         storageDuration= 5 * 365 * 24 * 3600;
-        stateInitStats = new StorageStats(1187, 3);
+        stateInitStats = new StorageStats(1197, 3);
         defaultContent = {
                            uri: 'https://some_stablecoin.org/meta.json'
                        };
@@ -290,6 +290,7 @@ describe('JettonWallet', () => {
     });
     // implementation detail
     it('minter admin should be able to mint jettons', async () => {
+        //await blockchain.setVerbosityForAddress(jettonMinter.address, {blockchainLogs:true, vmLogs: 'vm_logs'});
         // can mint from deployer
         let initialTotalSupply = await jettonMinter.getTotalSupply();
         const deployerJettonWallet = await userWallet(deployer.address);
@@ -760,7 +761,9 @@ describe('JettonWallet', () => {
             success: true
         });
         send_gas_fee = printTxGasStats("Jetton transfer", transferTx);
-        // send_gas_fee = computeGasFee(gasPrices, 9255n);
+        let mockGas = computeGasFee(gasPrices, 30766n);
+        expect(mockGas).toBeGreaterThanOrEqual(send_gas_fee)
+        send_gas_fee = mockGas;
 
         const receiveTx = findTransactionRequired(sendResult.transactions, {
             on: notDeployerJettonWallet.address,
@@ -769,7 +772,9 @@ describe('JettonWallet', () => {
             success: true
         });
         receive_gas_fee = printTxGasStats("Receive jetton", receiveTx);
-        // receive_gas_fee = computeGasFee(gasPrices, 10355n);
+        mockGas = computeGasFee(gasPrices, 32480n);
+        expect(mockGas).toBeGreaterThanOrEqual(receive_gas_fee);
+        receive_gas_fee = mockGas;
 
         expect(await deployerJettonWallet.getJettonBalance()).toEqual(initialJettonBalance - sentAmount);
         expect(await notDeployerJettonWallet.getJettonBalance()).toEqual(initialJettonBalance2 + sentAmount);
@@ -844,7 +849,7 @@ describe('JettonWallet', () => {
         await testSendFees(minimalFee - 1n, forwardAmount, null, null, false);
         // Now should succeed
         await testSendFees(minimalFee, forwardAmount, null, null, true);
-        console.log("Minimal transfer fee:", fromNano(minimalFee));
+        console.log("Minimal transfer fee no notification:", fromNano(minimalFee));
     });
     it('forward_payload should impact transfer fees', async () => {
         let jettonAmount  = 1n;
@@ -870,6 +875,11 @@ describe('JettonWallet', () => {
         minimalFee = calcSendFees(send_gas_fee, receive_gas_fee, minFwdFee, forwardAmount, min_tons_for_storage);
         // And succeed again, after updating calculations
         await testSendFees(minimalFee, forwardAmount, forwardPayload, null, true);
+        minFwdFee  = estimateTransferFwd(jettonAmount, 1n, null, null);
+        minimalFee = calcSendFees(send_gas_fee, receive_gas_fee,
+                                  minFwdFee, 1n, min_tons_for_storage);
+        console.log(`Minimal transfer fee with notification(empty forward):${fromNano(minimalFee)}`);
+
         // Custom payload impacts fee, because forwardAmount is calculated based on inMsg fwdFee field
         /*
         const customPayload = beginCell().storeUint(getRandomInt(100000, 200000), 128).endCell();
@@ -1042,12 +1052,10 @@ describe('JettonWallet', () => {
             const actualRecv   = printTxGasStats("Burn notification transaction", sendResult.transactions[2]);
             burn_gas_fee          = actualSent;
             burn_notification_fee = actualRecv;
-            /*
-            burn_gas_fee = computeGasFee(gasPrices, 5791n);
-            burn_notification_fee = computeGasFee(gasPrices, 6775n);
+            burn_gas_fee = computeGasFee(gasPrices, 6148n);
+            burn_notification_fee = computeGasFee(gasPrices, 28680n);
             expect(burn_gas_fee).toBeGreaterThanOrEqual(actualSent);
             expect(burn_notification_fee).toBeGreaterThanOrEqual(actualRecv);
-            */
     });
 
     it('not wallet owner should not be able to burn jettons', async () => {

@@ -336,7 +336,26 @@ export async function run(provider: NetworkProvider) {
             decimals     = verifyRes.decimals;
         }
         catch(e) {
-            retry = true;
+            ui.write(`Doesn't look like minter:${e}`);
+            retry = !(await promptBool("Are you sure it is the one", ['Yes', 'No'], ui, true));
+            const api = provider.api() as TonClient4;
+            const seqno = await getLastBlock(provider);
+            const contractState = await  api.getAccount(seqno, minterAddress);
+
+            if(contractState.account.state.type !== 'active') {
+                throw new Error("Account is inactive");
+            }
+            if(!contractState.account.state.data) {
+                throw new Error("Account has no data");
+            }
+            jettonMinterContract = provider.open(
+                JettonMinter.createFromAddress(minterAddress)
+            );
+            adminAddress = await jettonMinterContract.getAdminAddress();
+            ui.write("Ok, boss!");
+            decimals = Number(
+                await promptAmount("Please specify contract decimals please:", 1, ui)
+            );
         }
     } while(retry);
 

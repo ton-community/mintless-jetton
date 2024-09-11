@@ -2,16 +2,16 @@ import { checkJettonMinter } from '../wrappers/JettonMinterChecker';
 import { Address, beginCell, Cell, fromNano, OpenedContract, toNano } from '@ton/core';
 import { compile, NetworkProvider, UIProvider} from '@ton/blueprint';
 import { JettonMinter, jettonMinterConfigCellToConfig, JettonMinterConfigFull, jettonMinterConfigFullToCell } from '../wrappers/JettonMinter';
-import { promptBool, promptAmount, promptAddress, displayContentCell, getLastBlock, waitForTransaction, getAccountLastTx, promptToncoin, promptUrl, jettonWalletCodeFromLibrary } from '../wrappers/ui-utils';
+import { promptBool, promptAmount, promptAddress, displayContentCell, getLastBlock, waitForTransaction, getAccountLastTx, promptToncoin, promptUrl, jettonWalletCodeFromLibrary, promptBigInt } from '../wrappers/ui-utils';
 import {TonClient4} from "@ton/ton";
 import { fromUnits } from '../wrappers/units';
 let jettonMinterContract:OpenedContract<JettonMinter>;
 
-const adminActions  = ['Mint', 'Change admin', 'Drop admin', 'Change metadata', 'Upgrade' ];
+const adminActions  = ['Mint', 'Change admin', 'Drop admin', 'Update merkle root', 'Change metadata', 'Upgrade' ];
 const userActions   = ['Info', 'Top up', 'Claim admin', 'Quit'];
 let minterCode: Cell;
 let walletCode: Cell;
-let adminAddress: Address;
+let adminAddress: Address | null;
 let decimals: number;
 
 
@@ -186,6 +186,11 @@ const updateData = async (oldData: Cell, ui: UIProvider) => {
     do {
         newConfig   = {...curConfig};
         let   updateWallet = false;
+        const updateMerkle = await promptBool(`Current merkle root:${curConfig.merkle_root.toString(16)}\nWant to change?`, ['Yes', 'No'], ui, true);
+        if(updateMerkle) {
+            newConfig.merkle_root = await promptBigInt('Enter new merkle root in hex or numeric form:', ui);
+            console.log("New merkle root:", curConfig.merkle_root.toString(16));
+        }
         const updateSupply = await promptBool(`Current supply:${fromNano(curConfig.supply)}\nWant to change?`, ['Yes', 'No'], ui, true);
         if(updateSupply)
             newConfig.supply   = await promptAmount('Enter new supply amount:', decimals, ui);
@@ -210,6 +215,7 @@ const updateData = async (oldData: Cell, ui: UIProvider) => {
             supply: newConfig.supply.toString(),
             admin: newConfig.admin.toString(),
             transfer_admin: newConfig.transfer_admin?.toString(),
+            merkle_root: `0x${newConfig.merkle_root.toString(16)}`,
             wallet_code: updateWallet ? "updated" : "preserved"
         }, null, 2)}\nIs it okay?`, ['Yes', 'No'], ui));
     } while(retry);
@@ -247,6 +253,41 @@ const upgradeAction = async (provider: NetworkProvider, ui: UIProvider) => {
     }
     else {
         ui.write('Nothing to do then!');
+    }
+}
+
+const updateMerkleRoot = async (provider: NetworkProvider, ui: UIProvider) => {
+    const api = provider.api() as TonClient4;
+    const contractState = await api.getAccount(await getLastBlock(provider), jettonMinterContract.address);
+
+    if(contractState.account.state.type !== 'active') {
+        throw(Error("Upgrade is only possible for active contract"));
+    }
+    if(!contractState.account.state.code) {
+        throw(Error("Contract has no code"));
+    }
+    if(!contractState.account.state.data) {
+        throw(Error("Contract has no code"));
+    }
+
+    const codeBefore = Cell.fromBase64(contractState.account.state.code);
+    const dataBefore = Cell.fromBase64(contractState.account.state.data);
+    const curConfig  = jettonMinterConfigCellToConfig(dataBefore);
+    const newMerkle  = await promptBigInt('Enter new merkle root in hex or numeric form:', ui);
+
+    curConfig.merkle_root = newMerkle;
+    const newData    = jettonMinterConfigFullToCell(curConfig);
+
+    await jettonMinterContract.sendUpgrade(provider.sender(), codeBefore, newData, toNano('0.05'));
+    const gotTrans = await waitForTransaction(provider,
+                                              jettonMinterContract.address,
+                                              contractState.account.last!.lt,
+                                              10);
+    if(gotTrans){
+        ui.write("Contract upgraded successfully!");
+    }
+    else {
+        failedTransMessage(ui);
     }
 }
 
@@ -328,6 +369,9 @@ export async function run(provider: NetworkProvider) {
                 break;
             case 'Drop admin':
                 await dropAdminAction(provider, ui);
+                break;
+            case 'Update merkle root':
+                await updateMerkleRoot(provider, ui);
                 break;
             case 'Upgrade':
                 await upgradeAction(provider, ui);

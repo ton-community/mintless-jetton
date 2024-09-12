@@ -37,6 +37,17 @@ export const promptAddress = async (prompt: string, provider: UIProvider, fallba
 
 };
 
+export const promptBigInt = async (prompt: string, provider: UIProvider) => {
+    do {
+        try {
+            return BigInt(await provider.input(prompt));
+        }
+        catch(e) {
+            provider.write(`Unable to parse input merkle root:${e}`);
+        }
+    } while(true);
+}
+
 export const promptToncoin = async (prompt: string, provider: UIProvider) => {
     return promptAmount(prompt, 9, provider);
 }

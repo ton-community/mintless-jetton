@@ -8,7 +8,7 @@ import {
     sendToIndex
 } from "../wrappers/ui-utils";
 import {Address, Cell, fromNano, OpenedContract} from "@ton/core";
-import {JettonMinter, parseJettonMinterData} from "../wrappers/JettonMinter";
+import {JettonMinter, jettonMinterConfigCellToConfig, parseJettonMinterData} from "../wrappers/JettonMinter";
 import {NetworkProvider, UIProvider} from "@ton/blueprint";
 import {fromUnits} from "../wrappers/units";
 
@@ -48,7 +48,7 @@ export const checkJettonMinter = async (
     write('Toncoin balance on jetton-minter: ' + fromNano(result.balance) + ' TON');
 
     const data = base64toCell(result.data);
-    const parsedData = parseJettonMinterData(data);
+    const parsedData = jettonMinterConfigCellToConfig(data);
 
     if (parsedData.wallet_code.equals(jettonWalletCode)) {
         write('The jetton-wallet code matches the jetton-wallet code from this repository');
@@ -98,7 +98,8 @@ export const checkJettonMinter = async (
         wallet_code: jettonWalletCode,
         jetton_content: {
             uri: metadataUrl
-        }
+        },
+        merkle_root: parsedData.merkle_root
     }, jettonMinterCode)
 
     if (jettonMinterContract2.address.equals(jettonMinterAddress.address)) {

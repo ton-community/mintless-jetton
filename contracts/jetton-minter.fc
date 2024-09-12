@@ -236,3 +236,8 @@ slice get_next_admin_address() method_id {
     (int total_supply, slice admin_address, slice next_admin_address, cell jetton_wallet_code, cell metadata_uri) = load_data();
     return next_admin_address;
 }
+
+int get_mintless_airdrop_hashmap_root() method_id {
+    load_data();
+    return merkle_root;
+}

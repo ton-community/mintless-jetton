@@ -354,7 +354,7 @@ export async function run(provider: NetworkProvider) {
             adminAddress = await jettonMinterContract.getAdminAddress();
             ui.write("Ok, boss!");
             decimals = Number(
-                await promptAmount("Please specify contract decimals please:", 1, ui)
+                await promptAmount("Please specify contract decimals:", 0, ui)
             );
         }
     } while(retry);

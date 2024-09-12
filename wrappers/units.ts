@@ -39,7 +39,7 @@ export function toUnits(src: string | bigint, decimals: number): bigint {
         if (!frac) {
             frac = '0';
         }
-        if (frac.length > decimals) {
+        if (frac.length > decimals && decimals != 0) {
             throw Error('Invalid number');
         }
         while (frac.length < decimals) {

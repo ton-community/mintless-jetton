@@ -224,26 +224,19 @@ const updateData = async (oldData: Cell, ui: UIProvider) => {
     return jettonMinterConfigFullToCell(newConfig);
 }
 const upgradeAction = async (provider: NetworkProvider, ui: UIProvider) => {
-    const api = provider.api() as TonClient4;
     let upgradeCode = await promptBool(`Would you like to upgrade code?\nSource from jetton-minter.fc will be used.`, ['Yes', 'No'], ui, true);
     let upgradeData = await promptBool(`Would you like to upgrade data?`, ['Yes', 'No'], ui, true);
 
-    const contractState = await api.getAccount(await getLastBlock(provider), jettonMinterContract.address);
+    const contractState = await jettonMinterContract.getState();
 
-    if(contractState.account.state.type !== 'active')
-        throw(Error("Upgrade is only possible for active contract"));
-
-    if(contractState.account.state.code === null)
-        throw(Error(`Something is wrong!\nActive contract has to have code`));
-
-    const dataBefore =  contractState.account.state.data ? Cell.fromBase64(contractState.account.state.data) : beginCell().endCell();
+    const dataBefore =  contractState.data;
     if(upgradeCode || upgradeData) {
-        const newCode = upgradeCode ? minterCode : Cell.fromBase64(contractState.account.state.code);
+        const newCode = upgradeCode ? minterCode : contractState.code;
         const newData = upgradeData ? await updateData(dataBefore, ui) : dataBefore;
         await jettonMinterContract.sendUpgrade(provider.sender(), newCode, newData, toNano('0.05'));
         const gotTrans = await waitForTransaction(provider,
                                                   jettonMinterContract.address,
-                                                  contractState.account.last!.lt,
+                                                  contractState.last!.lt.toString(),
                                                   10);
         if(gotTrans){
             ui.write("Contract upgraded successfully!");

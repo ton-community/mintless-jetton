@@ -329,7 +329,10 @@ export async function run(provider: NetworkProvider) {
         }
         catch(e) {
             ui.write(`Doesn't look like minter:${e}`);
+            if(!(await promptBool("Are you sure it is the one", ['Yes', 'No'], ui, true))) {
+                return;
             }
+
             jettonMinterContract = provider.open(
                 JettonMinter.createFromAddress(minterAddress)
             );

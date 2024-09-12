@@ -21,14 +21,16 @@ const failedTransMessage = (ui:UIProvider) => {
 };
 
 const infoAction = async (provider:NetworkProvider, ui:UIProvider) => {
-    const jettonData = await jettonMinterContract.getJettonData();
+    const jettonFull = await jettonMinterContract.getFullConfig();
     ui.write("Jetton info:\n\n");
-    ui.write(`Admin:${jettonData.adminAddress}\n`);
-    ui.write(`Total supply:${fromNano(jettonData.totalSupply)}\n`);
-    ui.write(`Mintable:${jettonData.mintable}\n`);
+    ui.write(`Admin: ${jettonFull.admin}\n`);
+    ui.write(`Total supply: ${fromUnits(jettonFull.supply, decimals)}\n`);
+    // ui.write(`Mintable:${jettonData.mintable}\n`);
+    ui.write(`Merkle root: 0x${jettonFull.merkle_root.toString(16)}`);
     const displayContent = await ui.choose('Display content?', ['Yes', 'No'], (c: string) => c);
     if(displayContent == 'Yes') {
-        await displayContentCell(jettonData.content, ui);
+        const content = await jettonMinterContract.getContent();
+        await displayContentCell(content, ui);
     }
 };
 const topUpAction = async (provider: NetworkProvider, ui: UIProvider) => {
@@ -257,21 +259,11 @@ const upgradeAction = async (provider: NetworkProvider, ui: UIProvider) => {
 }
 
 const updateMerkleRoot = async (provider: NetworkProvider, ui: UIProvider) => {
-    const api = provider.api() as TonClient4;
-    const contractState = await api.getAccount(await getLastBlock(provider), jettonMinterContract.address);
+    const contractState = await jettonMinterContract.getState();
 
-    if(contractState.account.state.type !== 'active') {
-        throw(Error("Upgrade is only possible for active contract"));
-    }
-    if(!contractState.account.state.code) {
-        throw(Error("Contract has no code"));
-    }
-    if(!contractState.account.state.data) {
-        throw(Error("Contract has no code"));
-    }
 
-    const codeBefore = Cell.fromBase64(contractState.account.state.code);
-    const dataBefore = Cell.fromBase64(contractState.account.state.data);
+    const codeBefore = contractState.code;
+    const dataBefore = contractState.data;
     const curConfig  = jettonMinterConfigCellToConfig(dataBefore);
     const newMerkle  = await promptBigInt('Enter new merkle root in hex or numeric form:', ui);
 
@@ -281,7 +273,7 @@ const updateMerkleRoot = async (provider: NetworkProvider, ui: UIProvider) => {
     await jettonMinterContract.sendUpgrade(provider.sender(), codeBefore, newData, toNano('0.05'));
     const gotTrans = await waitForTransaction(provider,
                                               jettonMinterContract.address,
-                                              contractState.account.last!.lt,
+                                              contractState.last!.lt.toString(),
                                               10);
     if(gotTrans){
         ui.write("Contract upgraded successfully!");
@@ -337,16 +329,6 @@ export async function run(provider: NetworkProvider) {
         }
         catch(e) {
             ui.write(`Doesn't look like minter:${e}`);
-            retry = !(await promptBool("Are you sure it is the one", ['Yes', 'No'], ui, true));
-            const api = provider.api() as TonClient4;
-            const seqno = await getLastBlock(provider);
-            const contractState = await  api.getAccount(seqno, minterAddress);
-
-            if(contractState.account.state.type !== 'active') {
-                throw new Error("Account is inactive");
-            }
-            if(!contractState.account.state.data) {
-                throw new Error("Account has no data");
             }
             jettonMinterContract = provider.open(
                 JettonMinter.createFromAddress(minterAddress)

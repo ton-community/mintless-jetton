@@ -429,7 +429,27 @@ export class JettonMinter implements Contract {
         let res = await this.getJettonData(provider);
         return res.content;
     }
-
+    async getFullConfig(provider: ContractProvider) {
+        const { code, data } = await this.getState(provider);
+        return jettonMinterConfigCellToConfig(data);
+    }
+    async getState(provider: ContractProvider) {
+        const state = await provider.getState();
+        if(state.state.type !== 'active') {
+            throw new Error(`Contract state is ${state.state.type}`);
+        }
+        if(!state.state.code) {
+            throw new Error(`Constract has no code`);
+        }
+        if(!state.state.data) {
+            throw new Error(`Constract has no data`);
+        }
+        return {
+            code: Cell.fromBoc(state.state.code)[0],
+            data: Cell.fromBoc(state.state.data)[0],
+            last: state.last
+        }
+    }
     async getNextAdminAddress(provider: ContractProvider) {
         const res = await provider.get('get_next_admin_address', []);
         return res.stack.readAddressOpt();

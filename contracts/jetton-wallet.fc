@@ -72,8 +72,9 @@ global int salt;
         ;; first outgoing transfer can be from just deployed jetton wallet
         ;; in this case we need to reserve TON for storage
         int to_leave_on_balance = my_ton_balance - msg_value + my_storage_due();
-        int actual_withheld = max(to_leave_on_balance, calculate_jetton_wallet_min_storage_fee());
-        raw_reserve(actual_withheld, RESERVE_REGULAR | RESERVE_BOUNCE_ON_ACTION_FAIL);
+        int to_reserve = max(to_leave_on_balance, calculate_jetton_wallet_min_storage_fee());
+        raw_reserve(to_reserve, RESERVE_REGULAR | RESERVE_BOUNCE_ON_ACTION_FAIL);
+        int actual_withheld = to_leave_on_balance - to_reserve;
         mode = SEND_MODE_CARRY_ALL_BALANCE | SEND_MODE_BOUNCE_ON_ACTION_FAIL;
 
         ;; custom payload processing is not constant gas, account for that via gas_consumed()

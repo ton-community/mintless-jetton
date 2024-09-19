@@ -353,6 +353,33 @@ describe('Claim tests', () => {
             success: true,
         });
     });
+    it('claim fee should stay same regardless of jetton balance', async () => {
+        const testJetton = await userWallet(testReceiver.address);
+        const claimPayload = JettonWallet.claimPayload(receiverProof);
+        await cMaster.sendMint(deployer.getSender(),
+                               testReceiver.address,
+                               1n);
+        expect(await testJetton.getJettonBalance()).toEqual(1n);
+        await deployer.send({
+            to: testJetton.address,
+            bounce: false,
+            value: toNano('10')
+        });
+        const smc = await blockchain.getContract(testJetton.address);
+        expect(smc.balance).toBeGreaterThanOrEqual(toNano('10'));
+        const res = await testJetton.sendTransfer(testReceiver.getSender(), toNano('0.12'),
+                                            1n, deployer.address,
+                                            deployer.address, claimPayload, 1n);
+
+        expect(res.transactions).toHaveTransaction({
+            on: testJetton.address,
+            from: testReceiver.address,
+            op:Op.transfer,
+            success: true,
+        });
+        // Claimed - 1n sent to deployer
+        expect(await testJetton.getJettonBalance()).toEqual(toNano('100'));
+    });
     it('claim fee should be dynamic based on dictionary lookup cost', async () => {
         // Let's try much larger dictionary
 
@@ -637,8 +664,6 @@ describe('Claim tests', () => {
             aborted: true,
             exitCode: Errors.airdrop_not_found
         });
-
-
     });
     });
 });

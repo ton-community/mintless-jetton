@@ -56,11 +56,10 @@ global int salt;
     slice response_address = in_msg_body~load_msg_addr();
     cell custom_payload = in_msg_body~load_maybe_ref();
     int mode = SEND_MODE_CARRY_ALL_REMAINING_MESSAGE_VALUE | SEND_MODE_BOUNCE_ON_ACTION_FAIL;
-    ifnot(custom_payload.null?()) {
+    ifnot(status | custom_payload.null?()) {
         slice cps = custom_payload.begin_parse();
         int cp_op = cps~load_op();
         throw_unless(error::unknown_custom_payload, cp_op == op::merkle_airdrop_claim);
-        throw_if(error::airdrop_already_claimed, status);
         cell airdrop_proof = cps~load_ref();
         (int airdrop_amount, int start_from, int expired_at) = get_airdrop_params(airdrop_proof, merkle_root, owner_address);
         int time = now();

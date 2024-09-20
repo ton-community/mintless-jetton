@@ -26,4 +26,6 @@ export async function run(provider: NetworkProvider) {
         await compile('JettonMinter')));
 
     await minter.sendDeploy(provider.sender(), toNano("1.5")); // send 1.5 TON
+    // Will display resulting contract address
+    await provider.waitForDeploy(minter.address);
 }

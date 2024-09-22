@@ -10,7 +10,7 @@
 
 global int merkle_root;
 ;; storage#_ total_supply:Coins admin_address:MsgAddress next_admin_address:MsgAddress jetton_wallet_code:^Cell metadata_uri:^Cell = Storage;
-(int, slice, slice, cell, cell) load_data() inline {
+(int, slice, slice, cell, cell) load_data() impure inline {
     slice ds = get_data().begin_parse();
     var data = (
         ds~load_coins(), ;; total_supply

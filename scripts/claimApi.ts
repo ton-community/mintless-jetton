@@ -138,6 +138,8 @@ app.get('/wallet/:address', (req: Request, res: Response) => {
     let jettonWalletContract = JettonWallet.createFromConfig({ownerAddress: owner,
                                                       jettonMasterAddress: minter,
                                                       merkleRoot: merkleRoot,
+                                                      // we can pass arbitrary salt here bc it won't affect address calculation and payload
+                                                      salt: 1n,
     }, wallet_code);
 
     let stateInitB = beginCell();

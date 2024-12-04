@@ -198,9 +198,13 @@ export async function run(provider: NetworkProvider) {
     console.log("Wallet address: ", wallet.address.toString());
 
     //now lets create jetton wallet owned by wallet
+    // get salt from minter for correct init state
+    const jettonWalletSalt = await minter.getWalletSalt(wallet.address);
+
     let jettonWalletContract = JettonWallet.createFromConfig({ownerAddress: wallet.address,
                                                       jettonMasterAddress: minter.address,
                                                       merkleRoot: merkleRoot,
+                                                      salt: jettonWalletSalt,
     }, wallet_code);
     let jettonWallet = provider.open(jettonWalletContract);
 
